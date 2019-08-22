@@ -19,7 +19,6 @@ import (
 	"github.com/sylabs/singularity/internal/pkg/sylog"
 	"github.com/sylabs/singularity/internal/pkg/util/uri"
 	"github.com/sylabs/singularity/pkg/build/types"
-	shub "github.com/sylabs/singularity/pkg/client/shub"
 	"gopkg.in/cheggaaa/pb.v1"
 )
 
@@ -27,67 +26,6 @@ var (
 	// ErrLibraryPullUnsigned indicates that the interactive portion of the pull was aborted.
 	ErrLibraryPullUnsigned = errors.New("failed to verify container")
 )
-
-// PullShub will download a image from shub, and cache it. Next time
-// that container is downloaded this will just use that cached image.
-func PullShub(imgCache *cache.Handle, filePath string, shubRef string, noHTTPS bool) (err error) {
-	shubURI, err := shub.ShubParseReference(shubRef)
-	if err != nil {
-		return fmt.Errorf("failed to parse shub uri: %s", err)
-	}
-
-	// Get the image manifest
-	manifest, err := shub.GetManifest(shubURI, noHTTPS)
-	if err != nil {
-		return fmt.Errorf("failed to get manifest for: %s: %s", shubRef, err)
-	}
-
-	imageName := uri.GetName(shubRef)
-	imagePath := imgCache.ShubImage(manifest.Commit, imageName)
-
-	if imgCache.IsDisabled() {
-		// Dont use cached image
-		if err := shub.DownloadImage(manifest, filePath, shubRef, true, noHTTPS); err != nil {
-			return err
-		}
-	} else {
-		exists, err := imgCache.ShubImageExists(manifest.Commit, imageName)
-		if err != nil {
-			return fmt.Errorf("unable to check if %v exists: %v", imagePath, err)
-		}
-		if !exists {
-			sylog.Infof("Downloading shub image")
-			go interruptCleanup(imagePath)
-
-			err := shub.DownloadImage(manifest, imagePath, shubRef, true, noHTTPS)
-			if err != nil {
-				return err
-			}
-		} else {
-			sylog.Infof("Use image from cache")
-		}
-
-		dstFile, err := openOutputImage(filePath)
-		if err != nil {
-			return err
-		}
-		defer dstFile.Close()
-
-		srcFile, err := os.Open(imagePath)
-		if err != nil {
-			return fmt.Errorf("while opening cached image: %v", err)
-		}
-		defer srcFile.Close()
-
-		// Copy image from cache
-		_, err = io.Copy(dstFile, srcFile)
-		if err != nil {
-			return fmt.Errorf("while copying image from cache: %v", err)
-		}
-	}
-
-	return nil
-}
 
 // printProgress is called to display progress bar while downloading image from library.
 func printProgress(totalSize int64, r io.Reader, w io.Writer) error {

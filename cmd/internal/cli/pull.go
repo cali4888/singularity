@@ -268,7 +268,8 @@ func pullRun(cmd *cobra.Command, args []string) {
 			sylog.Warningf("Skipping container verification")
 		}
 	case ShubProtocol:
-		err := singularity.PullShub(imgCache, pullTo, pullFrom, noHTTPS)
+		shub := singularity.NewShub(imgCache, noHTTPS)
+		err := shub.Pull(context.Background(), pullFrom, pullTo)
 		if err != nil {
 			sylog.Fatalf("While pulling shub image: %v\n", err)
 		}
