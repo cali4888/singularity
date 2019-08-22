@@ -15,7 +15,6 @@ import (
 	"github.com/sylabs/singularity/internal/pkg/build"
 	"github.com/sylabs/singularity/internal/pkg/client/cache"
 	ociclient "github.com/sylabs/singularity/internal/pkg/client/oci"
-	"github.com/sylabs/singularity/internal/pkg/oras"
 	"github.com/sylabs/singularity/internal/pkg/sylog"
 	"github.com/sylabs/singularity/internal/pkg/util/uri"
 	"github.com/sylabs/singularity/pkg/build/types"
@@ -45,68 +44,6 @@ func printProgress(totalSize int64, r io.Reader, w io.Writer) error {
 	}
 
 	bar.Finish()
-
-	return nil
-}
-
-// OrasPull will download the image specified by the provided oci reference and store
-// it at the location specified by file, it will use credentials if supplied
-func OrasPull(imgCache *cache.Handle, name, ref string, force bool, ociAuth *ocitypes.DockerAuthConfig) error {
-	sum, err := oras.ImageSHA(ref, ociAuth)
-	if err != nil {
-		return fmt.Errorf("failed to get checksum for %s: %s", ref, err)
-	}
-
-	imageName := uri.GetName("oras:" + ref)
-
-	cacheImagePath := imgCache.OrasImage(sum, imageName)
-	exists, err := imgCache.OrasImageExists(sum, imageName)
-	if err == cache.ErrBadChecksum {
-		sylog.Warningf("Removing cached image: %s: cache could be corrupted", cacheImagePath)
-		err := os.Remove(cacheImagePath)
-		if err != nil {
-			return fmt.Errorf("unable to remove corrupted cache: %v", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("unable to check if %s exists: %v", cacheImagePath, err)
-	}
-
-	if !exists {
-		sylog.Infof("Downloading image with ORAS")
-		go interruptCleanup(cacheImagePath)
-
-		if err := oras.DownloadImage(cacheImagePath, ref, ociAuth); err != nil {
-			return fmt.Errorf("unable to Download Image: %v", err)
-		}
-
-		if cacheFileHash, err := oras.ImageHash(cacheImagePath); err != nil {
-			return fmt.Errorf("error getting ImageHash: %v", err)
-		} else if cacheFileHash != sum {
-			return fmt.Errorf("cached file hash(%s) and expected hash(%s) does not match", cacheFileHash, sum)
-		}
-	} else {
-		sylog.Infof("Using cached image")
-	}
-
-	dstFile, err := openOutputImage(name)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	srcFile, err := os.Open(cacheImagePath)
-	if err != nil {
-		return fmt.Errorf("while opening cached image: %v", err)
-	}
-	defer srcFile.Close()
-
-	// Copy SIF from cache
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return fmt.Errorf("while copying image from cache: %v", err)
-	}
-
-	sylog.Infof("Pull complete: %s\n", name)
 
 	return nil
 }

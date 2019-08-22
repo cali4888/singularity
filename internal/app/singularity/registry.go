@@ -24,7 +24,7 @@ type Library struct {
 	cache  *cache.Handle
 }
 
-// NewLibrary initializes and returns new Library ready to  be used.
+// NewLibrary initializes and returns new Library ready to be used.
 func NewLibrary(scsConfig *scs.Config, cache *cache.Handle, keystoreURI string) (*Library, error) {
 	libraryClient, err := client.NewClient(scsConfig)
 	if err != nil {
